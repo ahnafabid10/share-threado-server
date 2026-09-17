@@ -2,7 +2,7 @@ import bcrypt from "bcrypt";
 import config from "../../config";
 import { prisma } from "../../lib/prisma";
 import { jwtUtils } from "../../utils/jwt";
-import { IAuthResponse, ILoginUser, IRegisterUser } from "./auth.interface";
+import { IAuthResponse, IGoogleLoginUser, ILoginUser, IRegisterUser } from "./auth.interface";
 import { JwtPayload } from "jsonwebtoken";
 
 const registerUser = async (payload: IRegisterUser): Promise<IAuthResponse> => {
@@ -114,6 +114,95 @@ const loginUser = async (payload: ILoginUser): Promise<IAuthResponse> => {
   };
 };
 
+const googleLogin = async (payload: IGoogleLoginUser): Promise<IAuthResponse> => {
+  let userEmail = payload.email;
+  let userName = payload.name;
+  let userPhoto = payload.profilePhoto;
+
+  if (payload.idToken) {
+    try {
+      const response = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${payload.idToken}`
+      );
+      if (response.ok) {
+        const googleUser = (await response.json()) as {
+          email?: string;
+          name?: string;
+          picture?: string;
+          given_name?: string;
+        };
+        if (googleUser.email) {
+          userEmail = googleUser.email;
+          userName = googleUser.name || googleUser.given_name || userName || "Google User";
+          userPhoto = googleUser.picture || userPhoto;
+        }
+      }
+    } catch (err) {
+      console.error("Google token verification error:", err);
+    }
+  }
+
+  if (!userEmail) {
+    throw new Error("Unable to authenticate with Google. Valid email required.");
+  }
+
+  const normalizedEmail = userEmail.toLowerCase().trim();
+
+  let user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    const randomPassword =
+      Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+    const hashedPassword = await bcrypt.hash(randomPassword, config.bcrypt_salt_rounds);
+
+    user = await prisma.user.create({
+      data: {
+        name: (userName || "Google User").trim(),
+        email: normalizedEmail,
+        password: hashedPassword,
+        role: "USER",
+        profilePhoto: userPhoto || null,
+      },
+    });
+  } else if (user.activeStatus === "BLOCKED") {
+    throw new Error("This account is blocked. Please contact system support.");
+  }
+
+  const jwtPayload = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+
+  const accessToken = jwtUtils.createToken(
+    jwtPayload,
+    config.jwt.access_secret,
+    config.jwt.access_expires_in
+  );
+
+  const refreshToken = jwtUtils.createToken(
+    jwtPayload,
+    config.jwt.refresh_secret,
+    config.jwt.refresh_expires_in
+  );
+
+  return {
+    accessToken,
+    refreshToken,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      accountType: user.accountType,
+      profilePhoto: user.profilePhoto,
+    },
+  };
+};
+
 const refreshToken = async (token: string): Promise<{ accessToken: string }> => {
   if (!token) {
     throw new Error("Refresh token is required.");
@@ -180,6 +269,7 @@ const getMe = async (userId: string) => {
 export const authService = {
   registerUser,
   loginUser,
+  googleLogin,
   refreshToken,
   getMe,
 };

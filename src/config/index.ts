@@ -15,4 +15,8 @@ export default {
     access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN || "1d",
     refresh_expires_in: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   },
+  google: {
+    client_id: process.env.GOOGLE_CLIENT_ID || "",
+    client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+  },
 };

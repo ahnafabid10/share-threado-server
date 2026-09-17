@@ -13,6 +13,13 @@ export interface ILoginUser {
   password: string;
 }
 
+export interface IGoogleLoginUser {
+  idToken?: string;
+  email?: string;
+  name?: string;
+  profilePhoto?: string;
+}
+
 export interface IAuthResponse {
   accessToken: string;
   refreshToken: string;
