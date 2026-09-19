@@ -1,6 +1,7 @@
 model Post {
   id        String     @id @default(uuid())
   content    String     @db.Text
+  image      String?
   status     PostStatus @default(PENDING)
   loves      Int        @default(0)
   createdAt  DateTime   @default(now())

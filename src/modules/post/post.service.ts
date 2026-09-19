@@ -12,6 +12,7 @@ const createPostInDB = async (
   const post = await prisma.post.create({
     data: {
       content: payload.content,
+      image: payload.image,
       status: postStatus,
       authorId,
     },
