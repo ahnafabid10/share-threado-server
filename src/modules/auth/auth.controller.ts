@@ -85,8 +85,61 @@ const refreshToken = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const verifyEmail = catchAsync(async (req: Request, res: Response) => {
+  const { email, otp } = req.body;
+  const result = await authService.verifyEmail(email, otp);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
+const resendVerificationOtp = catchAsync(async (req: Request, res: Response) => {
+  const { email } = req.body;
+  const result = await authService.resendVerificationOtp(email);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
+const forgotPassword = catchAsync(async (req: Request, res: Response) => {
+  const { email } = req.body;
+  const result = await authService.forgotPassword(email);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
+const resetPassword = catchAsync(async (req: Request, res: Response) => {
+  const { email, otp, newPassword } = req.body;
+  const result = await authService.resetPassword(email, otp, newPassword);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
 export const authController = {
   loginUser,
   googleLogin,
   refreshToken,
+  verifyEmail,
+  resendVerificationOtp,
+  forgotPassword,
+  resetPassword,
 };
+

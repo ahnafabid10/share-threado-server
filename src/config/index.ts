@@ -19,4 +19,9 @@ export default {
     client_id: process.env.GOOGLE_CLIENT_ID || "",
     client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
   },
+  resend: {
+    api_key: process.env.RESEND_API_KEY || "",
+    sender_email: process.env.SENDER_EMAIL || "no-reply@sharethreado.com",
+  },
 };
+

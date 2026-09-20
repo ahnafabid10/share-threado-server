@@ -30,5 +30,7 @@ export interface IAuthResponse {
     role: Role;
     accountType?: string;
     profilePhoto?: string | null;
+    isVerified?: boolean;
   };
 }
+

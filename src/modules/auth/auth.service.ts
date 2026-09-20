@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { jwtUtils } from "../../utils/jwt";
 import { IAuthResponse, IGoogleLoginUser, ILoginUser, IRegisterUser } from "./auth.interface";
 import { JwtPayload } from "jsonwebtoken";
+import { generateOtp, sendVerificationOtpEmail, sendForgotPasswordOtpEmail } from "../../utils/email.service";
 
 const registerUser = async (payload: IRegisterUser): Promise<IAuthResponse> => {
   const { name, email, password, role, profilePhoto } = payload;
@@ -18,6 +19,9 @@ const registerUser = async (payload: IRegisterUser): Promise<IAuthResponse> => {
 
   const hashedPassword = await bcrypt.hash(password, config.bcrypt_salt_rounds);
 
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 Hours
+
   const newUser = await prisma.user.create({
     data: {
       name: name.trim(),
@@ -25,8 +29,17 @@ const registerUser = async (payload: IRegisterUser): Promise<IAuthResponse> => {
       password: hashedPassword,
       role: role || "USER",
       profilePhoto: profilePhoto || null,
+      isVerified: false,
+      verificationOtp: otp,
+      verificationOtpExpires: otpExpiresAt,
     },
   });
+
+  try {
+    await sendVerificationOtpEmail(newUser.email, otp);
+  } catch (err) {
+    console.error("Failed to send verification email:", err);
+  }
 
   const jwtPayload = {
     id: newUser.id,
@@ -57,6 +70,7 @@ const registerUser = async (payload: IRegisterUser): Promise<IAuthResponse> => {
       role: newUser.role,
       accountType: newUser.accountType,
       profilePhoto: newUser.profilePhoto,
+      isVerified: newUser.isVerified,
     },
   };
 };
@@ -80,6 +94,11 @@ const loginUser = async (payload: ILoginUser): Promise<IAuthResponse> => {
   if (!isPasswordValid) {
     throw new Error("Invalid email or password.");
   }
+
+  if (!user.isVerified) {
+    throw new Error("EMAIL_NOT_VERIFIED: Your email address is not verified yet. Please verify your email address to log in.");
+  }
+
 
   const jwtPayload = {
     id: user.id,
@@ -110,6 +129,7 @@ const loginUser = async (payload: ILoginUser): Promise<IAuthResponse> => {
       role: user.role,
       accountType: user.accountType,
       profilePhoto: user.profilePhoto,
+      isVerified: user.isVerified,
     },
   };
 };
@@ -164,6 +184,7 @@ const googleLogin = async (payload: IGoogleLoginUser): Promise<IAuthResponse> =>
         password: hashedPassword,
         role: "USER",
         profilePhoto: userPhoto || null,
+        isVerified: true, // Google login emails are automatically verified
       },
     });
   } else if (user.activeStatus === "BLOCKED") {
@@ -199,6 +220,7 @@ const googleLogin = async (payload: IGoogleLoginUser): Promise<IAuthResponse> =>
       role: user.role,
       accountType: user.accountType,
       profilePhoto: user.profilePhoto,
+      isVerified: user.isVerified,
     },
   };
 };
@@ -254,6 +276,7 @@ const getMe = async (userId: string) => {
       accountType: true,
       activeStatus: true,
       profilePhoto: true,
+      isVerified: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -266,10 +289,171 @@ const getMe = async (userId: string) => {
   return user;
 };
 
+const checkAndIncrementOtpRateLimit = (user: { otpSendCount: number; otpFirstSentAt: Date | null }) => {
+  const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+  const now = new Date();
+
+  let newCount = 1;
+  let firstSentAt = now;
+
+  if (user.otpFirstSentAt) {
+    const elapsed = now.getTime() - new Date(user.otpFirstSentAt).getTime();
+    if (elapsed < EIGHT_HOURS_MS) {
+      if (user.otpSendCount >= 2) {
+        const remainingMinutes = Math.ceil((EIGHT_HOURS_MS - elapsed) / (1000 * 60));
+        const remainingHours = Math.ceil(remainingMinutes / 60);
+        throw new Error(
+          `OTP email limit reached. You can only receive up to 2 OTP emails per 8 hours. Please try again in ${remainingHours} hours.`
+        );
+      }
+      newCount = user.otpSendCount + 1;
+      firstSentAt = new Date(user.otpFirstSentAt);
+    }
+  }
+
+  return { newCount, firstSentAt };
+};
+
+const verifyEmail = async (email: string, otp: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    throw new Error("User with this email was not found.");
+  }
+
+  if (user.isVerified) {
+    return { message: "Email is already verified." };
+  }
+
+  if (!user.verificationOtp || user.verificationOtp !== otp.trim()) {
+    throw new Error("Invalid verification OTP code.");
+  }
+
+  if (!user.verificationOtpExpires || new Date() > user.verificationOtpExpires) {
+    throw new Error("Verification OTP code has expired. Please request a new code.");
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      isVerified: true,
+      verificationOtp: null,
+      verificationOtpExpires: null,
+    },
+  });
+
+  return { message: "Email address verified successfully!" };
+};
+
+const resendVerificationOtp = async (email: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    throw new Error("User with this email was not found.");
+  }
+
+  if (user.isVerified) {
+    throw new Error("Email address is already verified.");
+  }
+
+  const { newCount, firstSentAt } = checkAndIncrementOtpRateLimit(user);
+
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 Hours
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      verificationOtp: otp,
+      verificationOtpExpires: otpExpiresAt,
+      otpSendCount: newCount,
+      otpFirstSentAt: firstSentAt,
+    },
+  });
+
+  await sendVerificationOtpEmail(user.email, otp);
+
+  return { message: `Verification OTP code sent to your email (${newCount}/2 sent in 8 hours).` };
+};
+
+const forgotPassword = async (email: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    return { message: "If an account with this email exists, a password reset OTP has been sent." };
+  }
+
+  const { newCount, firstSentAt } = checkAndIncrementOtpRateLimit(user);
+
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 Hours
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      resetPasswordOtp: otp,
+      resetPasswordOtpExpires: otpExpiresAt,
+      otpSendCount: newCount,
+      otpFirstSentAt: firstSentAt,
+    },
+  });
+
+  await sendForgotPasswordOtpEmail(user.email, otp);
+
+  return { message: `Password reset OTP has been sent to your email (${newCount}/2 sent in 8 hours).` };
+};
+
+
+const resetPassword = async (email: string, otp: string, newPassword: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    throw new Error("User with this email was not found.");
+  }
+
+  if (!user.resetPasswordOtp || user.resetPasswordOtp !== otp.trim()) {
+    throw new Error("Invalid password reset OTP code.");
+  }
+
+  if (!user.resetPasswordOtpExpires || new Date() > user.resetPasswordOtpExpires) {
+    throw new Error("Password reset OTP code has expired. Please request a new code.");
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, config.bcrypt_salt_rounds);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+      resetPasswordOtp: null,
+      resetPasswordOtpExpires: null,
+    },
+  });
+
+  return { message: "Password has been reset successfully." };
+};
+
 export const authService = {
   registerUser,
   loginUser,
   googleLogin,
   refreshToken,
   getMe,
+  verifyEmail,
+  resendVerificationOtp,
+  forgotPassword,
+  resetPassword,
 };
+

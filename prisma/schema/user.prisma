@@ -6,12 +6,21 @@ model User {
   role         Role         @default(USER)
   accountType  AccountType  @default(FREE)
   activeStatus ActiveStatus @default(ACTIVE)
-  profilePhoto String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  profilePhoto               String?
+  isVerified                 Boolean   @default(false)
+  verificationOtp            String?
+  verificationOtpExpires     DateTime?
+  resetPasswordOtp           String?
+  resetPasswordOtpExpires    DateTime?
+  otpSendCount               Int       @default(0)
+  otpFirstSentAt             DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
 
   posts Post[]
   loves PostLove[]
 
   @@map("users")
 }
+
