@@ -2,78 +2,9 @@ import bcrypt from "bcrypt";
 import config from "../../config";
 import { prisma } from "../../lib/prisma";
 import { jwtUtils } from "../../utils/jwt";
-import { IAuthResponse, IGoogleLoginUser, ILoginUser, IRegisterUser } from "./auth.interface";
+import { IAuthResponse, IGoogleLoginUser, ILoginUser } from "./auth.interface";
 import { JwtPayload } from "jsonwebtoken";
 import { generateOtp, sendVerificationOtpEmail, sendForgotPasswordOtpEmail } from "../../utils/email.service";
-
-const registerUser = async (payload: IRegisterUser): Promise<IAuthResponse> => {
-  const { name, email, password, role, profilePhoto } = payload;
-
-  const existingUser = await prisma.user.findUnique({
-    where: { email: email.toLowerCase().trim() },
-  });
-
-  if (existingUser) {
-    throw new Error("A user with this email address already exists.");
-  }
-
-  const hashedPassword = await bcrypt.hash(password, config.bcrypt_salt_rounds);
-
-  const otp = generateOtp();
-  const otpExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 Hours
-
-  const newUser = await prisma.user.create({
-    data: {
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      password: hashedPassword,
-      role: role || "USER",
-      profilePhoto: profilePhoto || null,
-      isVerified: false,
-      verificationOtp: otp,
-      verificationOtpExpires: otpExpiresAt,
-    },
-  });
-
-  try {
-    await sendVerificationOtpEmail(newUser.email, otp);
-  } catch (err) {
-    console.error("Failed to send verification email:", err);
-  }
-
-  const jwtPayload = {
-    id: newUser.id,
-    name: newUser.name,
-    email: newUser.email,
-    role: newUser.role,
-  };
-
-  const accessToken = jwtUtils.createToken(
-    jwtPayload,
-    config.jwt.access_secret,
-    config.jwt.access_expires_in
-  );
-
-  const refreshToken = jwtUtils.createToken(
-    jwtPayload,
-    config.jwt.refresh_secret,
-    config.jwt.refresh_expires_in
-  );
-
-  return {
-    accessToken,
-    refreshToken,
-    user: {
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      accountType: newUser.accountType,
-      profilePhoto: newUser.profilePhoto,
-      isVerified: newUser.isVerified,
-    },
-  };
-};
 
 const loginUser = async (payload: ILoginUser): Promise<IAuthResponse> => {
   const { email, password } = payload;
@@ -125,6 +56,7 @@ const loginUser = async (payload: ILoginUser): Promise<IAuthResponse> => {
     user: {
       id: user.id,
       name: user.name,
+      username: user.username,
       email: user.email,
       role: user.role,
       accountType: user.accountType,
@@ -177,9 +109,18 @@ const googleLogin = async (payload: IGoogleLoginUser): Promise<IAuthResponse> =>
       Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
     const hashedPassword = await bcrypt.hash(randomPassword, config.bcrypt_salt_rounds);
 
+    const baseUsername =
+      normalizedEmail.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 25) || "user";
+    let candidateUsername = baseUsername;
+    const existing = await prisma.user.findUnique({ where: { username: candidateUsername } });
+    if (existing) {
+      candidateUsername = `${candidateUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
     user = await prisma.user.create({
       data: {
         name: (userName || "Google User").trim(),
+        username: candidateUsername,
         email: normalizedEmail,
         password: hashedPassword,
         role: "USER",
@@ -216,6 +157,7 @@ const googleLogin = async (payload: IGoogleLoginUser): Promise<IAuthResponse> =>
     user: {
       id: user.id,
       name: user.name,
+      username: user.username,
       email: user.email,
       role: user.role,
       accountType: user.accountType,
@@ -446,7 +388,6 @@ const resetPassword = async (email: string, otp: string, newPassword: string) =>
 };
 
 export const authService = {
-  registerUser,
   loginUser,
   googleLogin,
   refreshToken,

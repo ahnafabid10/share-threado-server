@@ -21,6 +21,7 @@ const createPostInDB = async (
         select: {
           id: true,
           name: true,
+          username: true,
           email: true,
           role: true,
           accountType: true,
@@ -52,6 +53,7 @@ const getAllPostsFromDB = async (query?: { admin?: string; status?: string }) =>
         select: {
           id: true,
           name: true,
+          username: true,
           email: true,
           role: true,
           accountType: true,
@@ -82,6 +84,7 @@ const getMyPostsFromDB = async (authorId: string) => {
         select: {
           id: true,
           name: true,
+          username: true,
           email: true,
           role: true,
           accountType: true,
@@ -107,6 +110,7 @@ const getSinglePostFromDB = async (id: string) => {
         select: {
           id: true,
           name: true,
+          username: true,
           email: true,
           role: true,
           accountType: true,
@@ -145,6 +149,7 @@ const updatePostInDB = async (
         select: {
           id: true,
           name: true,
+          username: true,
           email: true,
           role: true,
           accountType: true,

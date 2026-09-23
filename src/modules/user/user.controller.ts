@@ -39,8 +39,21 @@ const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getUserProfileByUsername = catchAsync(async (req: Request, res: Response) => {
+  const username = req.params.username as string;
+  const result = await userService.getUserProfileByUsernameFromDB(username);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "User profile retrieved successfully",
+    data: result,
+  });
+});
+
 export const userController = {
   registerUser,
   getMyProfile,
   updateMyProfile,
+  getUserProfileByUsername,
 };
