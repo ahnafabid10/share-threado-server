@@ -3,6 +3,7 @@ import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/sendResponse";
 import { postService } from "./post.service";
+import { IGetPostsQuery } from "./post.interface";
 
 const createPost = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.id as string;
@@ -20,7 +21,7 @@ const createPost = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllPosts = catchAsync(async (req: Request, res: Response) => {
-  const query = req.query as { admin?: string; status?: string };
+  const query = req.query as IGetPostsQuery;
   const result = await postService.getAllPostsFromDB(query);
 
   sendResponse(res, {
