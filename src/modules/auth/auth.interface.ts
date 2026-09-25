@@ -1,12 +1,5 @@
 import { Role } from "@prisma/client";
 
-export interface IRegisterUser {
-  name: string;
-  email: string;
-  password: string;
-  role?: Role;
-  profilePhoto?: string;
-}
 
 export interface ILoginUser {
   email: string;
@@ -26,6 +19,7 @@ export interface IAuthResponse {
   user: {
     id: string;
     name: string;
+    username: string | null;
     email: string;
     role: Role;
     accountType?: string;
