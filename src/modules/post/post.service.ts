@@ -1,5 +1,10 @@
 import { prisma } from "../../lib/prisma";
-import { ICreatePostInput, IUpdatePostInput } from "./post.interface";
+import {
+  ICreatePostInput,
+  IGetPostsQuery,
+  IPaginatedPostsResult,
+  IUpdatePostInput,
+} from "./post.interface";
 
 const createPostInDB = async (
   authorId: string,
@@ -34,7 +39,9 @@ const createPostInDB = async (
   return post;
 };
 
-const getAllPostsFromDB = async (query?: { admin?: string; status?: string }) => {
+const getAllPostsFromDB = async (
+  query?: IGetPostsQuery
+): Promise<IPaginatedPostsResult> => {
   const where: any = {};
 
   if (query?.admin === "true") {
@@ -46,32 +53,83 @@ const getAllPostsFromDB = async (query?: { admin?: string; status?: string }) =>
     where.status = "PUBLISHED";
   }
 
-  const posts = await prisma.post.findMany({
-    where,
-    include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          email: true,
-          role: true,
-          accountType: true,
-          profilePhoto: true,
-        },
-      },
-      lovesList: {
-        select: {
-          userId: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+  const orderBy =
+    query?.sort === "popular"
+      ? [{ loves: "desc" as const }, { createdAt: "desc" as const }]
+      : { createdAt: "desc" as const };
 
-  return posts;
+  const includeAuthorAndLoves = {
+    author: {
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        role: true,
+        accountType: true,
+        profilePhoto: true,
+      },
+    },
+    lovesList: {
+      select: {
+        userId: true,
+      },
+    },
+  };
+
+  // If query.all is "true", return all posts unpaginated
+  if (query?.all === "true") {
+    const posts = await prisma.post.findMany({
+      where,
+      include: includeAuthorAndLoves,
+      orderBy,
+    });
+
+    return {
+      posts,
+      nextCursor: null,
+      hasMore: false,
+      total: posts.length,
+    };
+  }
+
+  // Cursor pagination
+  const parsedLimit = Math.min(Math.max(Number(query?.limit) || 10, 1), 50);
+
+  let items: any[] = [];
+  try {
+    items = await prisma.post.findMany({
+      where,
+      take: parsedLimit + 1,
+      ...(query?.cursor
+        ? {
+            cursor: { id: query.cursor },
+            skip: 1,
+          }
+        : {}),
+      include: includeAuthorAndLoves,
+      orderBy,
+    });
+  } catch (err) {
+    // Fallback if cursor id was deleted or invalid
+    items = await prisma.post.findMany({
+      where,
+      take: parsedLimit + 1,
+      include: includeAuthorAndLoves,
+      orderBy,
+    });
+  }
+
+  const hasMore = items.length > parsedLimit;
+  const posts = hasMore ? items.slice(0, parsedLimit) : items;
+  const nextCursor =
+    hasMore && posts.length > 0 ? posts[posts.length - 1].id : null;
+
+  return {
+    posts,
+    nextCursor,
+    hasMore,
+  };
 };
 
 const getMyPostsFromDB = async (authorId: string) => {
