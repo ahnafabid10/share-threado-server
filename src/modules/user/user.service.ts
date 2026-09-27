@@ -160,9 +160,35 @@ const getUserProfileByUsernameFromDB = async (username: string) => {
           lovesList: true,
         },
       },
+      products: {
+        where: {
+          status: "PUBLISHED",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              email: true,
+              role: true,
+              accountType: true,
+              profilePhoto: true,
+            },
+          },
+        },
+      },
       _count: {
         select: {
           posts: {
+            where: {
+              status: "PUBLISHED",
+            },
+          },
+          products: {
             where: {
               status: "PUBLISHED",
             },

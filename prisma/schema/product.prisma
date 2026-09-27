@@ -1,0 +1,41 @@
+model Product {
+  id          String     @id @default(uuid())
+  title       String     @db.VarChar(255)
+  slug        String     @unique @db.VarChar(255)
+  subtitle    String     @db.VarChar(300)
+  description String     @db.Text
+  logo        String?
+  websiteUrl  String     @db.VarChar(500)
+  youtubeUrl  String?    @db.VarChar(500)
+  images      String[]   @default([])
+  categories  String[]
+  upvoteCount Int        @default(0)
+  visitCount  Int        @default(0)
+  status      PostStatus @default(PUBLISHED)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  authorId    String
+  author      User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  upvotesList ProductUpvote[]
+
+  @@index([authorId])
+  @@index([status])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([status, upvoteCount(sort: Desc)])
+  @@map("products")
+}
+
+model ProductUpvote {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+  @@map("product_upvotes")
+}

@@ -71,3 +71,28 @@ export const auth = (...requiredRoles: Role[]) => {
     next();
   });
 };
+
+export const optionalAuth = () => {
+  return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const token = req.cookies.accessToken
+      ? req.cookies.accessToken
+      : req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization?.split(" ")[1]
+      : req.headers.authorization;
+
+    if (token) {
+      const verifiedToken = jwtUtils.verifyToken(
+        token,
+        config.jwt.access_secret
+      );
+
+      if (verifiedToken.success && verifiedToken.data) {
+        const { email, name, id, role } = verifiedToken.data as JwtPayload;
+        req.user = { email, name, id, role };
+      }
+    }
+
+    next();
+  });
+};
+
