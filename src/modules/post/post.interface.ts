@@ -8,7 +8,7 @@ export interface ICreatePostInput {
 
 export interface IUpdatePostInput {
   content?: string;
-  image?: string;
+  image?: string | null;
   status?: PostStatus;
 }
 

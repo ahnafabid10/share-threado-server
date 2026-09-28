@@ -1,5 +1,9 @@
 import { prisma } from "../../lib/prisma";
 import {
+  deleteImageFromCloudinary,
+  deleteMultipleImagesFromCloudinary,
+} from "../../utils/cloudinary.service";
+import {
   ICreateProductInput,
   IGetProductsQuery,
   IPaginatedProductsResult,
@@ -342,6 +346,25 @@ const updateProductInDB = async (
     }
   }
 
+  // Delete old logo from Cloudinary if replaced or removed
+  if (payload.logo !== undefined && product.logo && product.logo !== payload.logo) {
+    deleteImageFromCloudinary(product.logo).catch((err) =>
+      console.error("[Cloudinary] Failed to delete old product logo:", err)
+    );
+  }
+
+  // Delete screenshots from Cloudinary that were removed in the update
+  if (payload.images !== undefined && Array.isArray(product.images) && product.images.length > 0) {
+    const removedImages = product.images.filter(
+      (oldImg) => !payload.images?.includes(oldImg)
+    );
+    if (removedImages.length > 0) {
+      deleteMultipleImagesFromCloudinary(removedImages).catch((err) =>
+        console.error("[Cloudinary] Failed to delete removed product screenshots:", err)
+      );
+    }
+  }
+
   const updatedProduct = await prisma.product.update({
     where: { id },
     data: payload,
@@ -370,6 +393,18 @@ const deleteProductFromDB = async (
 
   if (product.authorId !== userId && userRole !== "ADMIN") {
     throw new Error("You are not authorized to delete this product");
+  }
+
+  // Delete logo and screenshots from Cloudinary
+  if (product.logo) {
+    deleteImageFromCloudinary(product.logo).catch((err) =>
+      console.error("[Cloudinary] Failed to delete product logo on delete:", err)
+    );
+  }
+  if (product.images && product.images.length > 0) {
+    deleteMultipleImagesFromCloudinary(product.images).catch((err) =>
+      console.error("[Cloudinary] Failed to delete product screenshots on delete:", err)
+    );
   }
 
   const deletedProduct = await prisma.product.delete({

@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import config from "../../config";
 import { prisma } from "../../lib/prisma";
+import { deleteImageFromCloudinary } from "../../utils/cloudinary.service";
 import { RegisterUserPayload, UpdateUserProfilePayload } from "./user.interface";
 
 import { generateOtp, sendVerificationOtpEmail } from "../../utils/email.service";
@@ -218,6 +219,22 @@ const updateMyProfileInDB = async (userId: string, payload: UpdateUserProfilePay
     });
     if (existing) {
       throw new Error("This username is already taken");
+    }
+  }
+
+  // If new profile photo is provided and differs from existing, delete old profile photo from Cloudinary
+  if (profilePhoto !== undefined) {
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profilePhoto: true },
+    });
+    if (
+      existingUser?.profilePhoto &&
+      existingUser.profilePhoto !== profilePhoto
+    ) {
+      deleteImageFromCloudinary(existingUser.profilePhoto).catch((err) =>
+        console.error("[Cloudinary] Failed to delete old profile photo:", err)
+      );
     }
   }
 

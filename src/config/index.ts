@@ -23,5 +23,10 @@ export default {
     api_key: process.env.RESEND_API_KEY || "",
     sender_email: process.env.SENDER_EMAIL || "no-reply@sharethreado.com",
   },
+  cloudinary: {
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "",
+    api_key: process.env.CLOUDINARY_API_KEY || "",
+    api_secret: process.env.CLOUDINARY_API_SECRET || "",
+  },
 };
 
