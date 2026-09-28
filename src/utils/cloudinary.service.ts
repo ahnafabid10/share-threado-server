@@ -55,7 +55,7 @@ export const getPublicIdFromUrl = (url?: string | null): string | null => {
 
     return publicId || null;
   } catch (err) {
-    console.error("[Cloudinary] Failed to parse public_id from URL:", url, err);
+    console.error("[Cloudinary] Failed to parse public id from URL:", url, err);
     return null;
   }
 };
@@ -70,7 +70,7 @@ export const deleteImageFromCloudinary = async (
 
   if (!config.cloudinary.api_secret || !config.cloudinary.cloud_name) {
     console.warn(
-      "[Cloudinary] Skipping deletion: CLOUDINARY_API_SECRET or CLOUDINARY_CLOUD_NAME not configured."
+      "[Cloudinary] Skipping deletion not configured."
     );
     return;
   }
@@ -87,7 +87,6 @@ export const deleteImageFromCloudinary = async (
     const result = await cloudinary.uploader.destroy(publicId, {
       invalidate: true,
     });
-    console.log(`[Cloudinary] Successfully deleted image public_id: "${publicId}"`, result);
     return result;
   } catch (error) {
     console.error(`[Cloudinary] Error deleting image "${publicId}":`, error);

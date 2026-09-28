@@ -1,7 +1,6 @@
 import { prisma } from "../lib/prisma";
 
 async function run() {
-  console.log("Altering table...");
   await prisma.$executeRawUnsafe(
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(50);"
   );
@@ -14,10 +13,8 @@ async function run() {
   await prisma.$executeRawUnsafe(
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(100);"
   );
-  console.log("Columns added successfully!");
 
   const users = await prisma.user.findMany();
-  console.log("Total users:", users.length);
 
   for (const u of users) {
     if (!u.username) {
@@ -38,14 +35,12 @@ async function run() {
         where: { id: u.id },
         data: { username: candidate },
       });
-      console.log("Updated user username:", u.email, "->", candidate);
     }
   }
 
   await prisma.$executeRawUnsafe(
     "CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users(username);"
   );
-  console.log("Unique index added successfully!");
   process.exit(0);
 }
 
