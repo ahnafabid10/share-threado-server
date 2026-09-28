@@ -22,8 +22,10 @@ model User {
   updatedAt                  DateTime  @updatedAt
 
 
-  posts Post[]
-  loves PostLove[]
+  posts          Post[]
+  loves          PostLove[]
+  products       Product[]
+  productUpvotes ProductUpvote[]
 
   @@map("users")
 }

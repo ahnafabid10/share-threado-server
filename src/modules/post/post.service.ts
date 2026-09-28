@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma";
+import { deleteImageFromCloudinary } from "../../utils/cloudinary.service";
 import {
   ICreatePostInput,
   IGetPostsQuery,
@@ -199,6 +200,13 @@ const updatePostInDB = async (
     throw new Error("You are not authorized to update this post");
   }
 
+  // If new image is provided and it differs from previous image, delete the old image from Cloudinary
+  if (payload.image !== undefined && post.image && post.image !== payload.image) {
+    deleteImageFromCloudinary(post.image).catch((err) =>
+      console.error("[Cloudinary] Failed to delete old post image:", err)
+    );
+  }
+
   const updatedPost = await prisma.post.update({
     where: { id },
     data: payload,
@@ -231,6 +239,13 @@ const deletePostInDB = async (id: string, userId: string, userRole: string) => {
 
   if (post.authorId !== userId && userRole !== "ADMIN") {
     throw new Error("You are not authorized to delete this post");
+  }
+
+  // Delete image from Cloudinary if post had an image
+  if (post.image) {
+    deleteImageFromCloudinary(post.image).catch((err) =>
+      console.error("[Cloudinary] Failed to delete post image on delete:", err)
+    );
   }
 
   const deletedPost = await prisma.post.delete({
