@@ -10,10 +10,10 @@ export default {
   app_url: process.env.APP_URL,
   bcrypt_salt_rounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 10,
   jwt: {
-    access_secret: process.env.JWT_ACCESS_SECRET,
-    refresh_secret: process.env.JWT_REFRESH_SECRET,
-    access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,
-    refresh_expires_in: process.env.JWT_REFRESH_EXPIRES_IN,
+    access_secret: process.env.JWT_ACCESS_SECRET || "default_access_secret_key",
+    refresh_secret: process.env.JWT_REFRESH_SECRET || "default_refresh_secret_key",
+    access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN || "1d",
+    refresh_expires_in: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   },
   google: {
     client_id: process.env.GOOGLE_CLIENT_ID || "",

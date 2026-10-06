@@ -22,10 +22,12 @@ model User {
   updatedAt                  DateTime  @updatedAt
 
 
-  posts          Post[]
-  loves          PostLove[]
-  products       Product[]
-  productUpvotes ProductUpvote[]
+  posts                 Post[]
+  loves                 PostLove[]
+  products              Product[]
+  productUpvotes        ProductUpvote[]
+  receivedNotifications Notification[]  @relation("UserReceivedNotifications")
+  sentNotifications     Notification[]  @relation("UserSentNotifications")
 
   @@map("users")
 }

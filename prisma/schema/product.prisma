@@ -39,3 +39,14 @@ model ProductUpvote {
   @@index([productId])
   @@map("product_upvotes")
 }
+
+model ProductVisit {
+  id            String   @id @default(uuid())
+  productId     String
+  ipHash        String   @db.VarChar(64)
+  lastVisitedAt DateTime @default(now())
+
+  @@unique([productId, ipHash])
+  @@index([productId])
+  @@map("product_visits")
+}

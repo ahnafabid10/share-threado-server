@@ -85,11 +85,27 @@ const toggleUpvote = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getClientIp = (req: Request): string => {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    return forwarded.split(",")[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    return forwarded[0].trim();
+  }
+  const realIp = req.headers["x-real-ip"] || req.headers["cf-connecting-ip"];
+  if (typeof realIp === "string") {
+    return realIp.trim();
+  }
+  return req.ip || req.socket.remoteAddress || "127.0.0.1";
+};
+
 const trackVisit = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const source = (req.body?.source as string) || (req.query?.source as string) || "direct";
+  const clientIp = getClientIp(req);
 
-  const result = await productService.trackProductVisitInDB(id, source);
+  const result = await productService.trackProductVisitInDB(id, clientIp, source);
 
   sendResponse(res, {
     success: true,

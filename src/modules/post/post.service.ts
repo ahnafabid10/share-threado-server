@@ -6,6 +6,7 @@ import {
   IPaginatedPostsResult,
   IUpdatePostInput,
 } from "./post.interface";
+import { notificationService } from "../notification/notification.service";
 
 const createPostInDB = async (
   authorId: string,
@@ -315,7 +316,49 @@ const toggleLoveInDB = async (postId: string, userId: string) => {
       }),
     ]);
 
-    const updatedPost = await prisma.post.findUnique({ where: { id: postId } });
+    const updatedPost = await prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        content: true,
+        authorId: true,
+        loves: true,
+        author: {
+          select: { username: true },
+        },
+      },
+    });
+
+    // Trigger in-app notification to post author (async, non-blocking)
+    if (updatedPost && updatedPost.authorId !== userId) {
+      prisma.user
+        .findUnique({
+          where: { id: userId },
+          select: { name: true },
+        })
+        .then((voter) => {
+          const senderName = voter?.name || "Someone";
+          const snippet =
+            updatedPost.content.length > 40
+              ? `${updatedPost.content.substring(0, 40)}...`
+              : updatedPost.content;
+          notificationService
+            .createNotificationInDB({
+              recipientId: updatedPost.authorId,
+              senderId: userId,
+              type: "POST_LOVE",
+              message: `${senderName} loved your post "${snippet}"`,
+              link: updatedPost.author?.username
+                ? `/${updatedPost.author.username}`
+                : `/home`,
+            })
+            .catch((err) =>
+              console.error("[Notification] Failed to create love notification:", err)
+            );
+        })
+        .catch(() => {});
+    }
+
     return { isLoved: true, loves: updatedPost?.loves ?? 0 };
   }
 };

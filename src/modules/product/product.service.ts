@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "../../lib/prisma";
 import {
   deleteImageFromCloudinary,
@@ -9,6 +10,7 @@ import {
   IPaginatedProductsResult,
   IUpdateProductInput,
 } from "./product.interface";
+import { notificationService } from "../notification/notification.service";
 
 // Helper to generate a clean URL slug from title
 const generateSlug = async (title: string): Promise<string> => {
@@ -288,8 +290,38 @@ const toggleProductUpvoteInDB = async (productId: string, userId: string) => {
 
     const updated = await prisma.product.findUnique({
       where: { id: productId },
-      select: { upvoteCount: true },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        authorId: true,
+        upvoteCount: true,
+      },
     });
+
+    // Trigger in-app notification to product creator (async, non-blocking)
+    if (updated && updated.authorId !== userId) {
+      prisma.user
+        .findUnique({
+          where: { id: userId },
+          select: { name: true },
+        })
+        .then((voter) => {
+          const senderName = voter?.name || "Someone";
+          notificationService
+            .createNotificationInDB({
+              recipientId: updated.authorId,
+              senderId: userId,
+              type: "PRODUCT_UPVOTE",
+              message: `${senderName} upvoted your product "${updated.title}"`,
+              link: `/products/${updated.slug}`,
+            })
+            .catch((err) =>
+              console.error("[Notification] Failed to create upvote notification:", err)
+            );
+        })
+        .catch(() => {});
+    }
 
     return {
       isUpvoted: true,
@@ -298,25 +330,101 @@ const toggleProductUpvoteInDB = async (productId: string, userId: string) => {
   }
 };
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
 const trackProductVisitInDB = async (
   productId: string,
+  clientIp: string,
   _source?: string
 ) => {
-  const product = await prisma.product.update({
+  const product = await prisma.product.findUnique({
     where: { id: productId },
-    data: {
-      visitCount: {
-        increment: 1,
+    select: { id: true, visitCount: true, websiteUrl: true },
+  });
+
+  if (!product) {
+    throw new Error("Product not found");
+  }
+
+  // Generate SHA-256 hash of IP with product salt for privacy & deduplication
+  const ipHash = crypto
+    .createHash("sha256")
+    .update(`${clientIp || "unknown_ip"}_sharethreado_salt`)
+    .digest("hex");
+
+  const existingVisit = await prisma.productVisit.findUnique({
+    where: {
+      productId_ipHash: {
+        productId,
+        ipHash,
       },
-    },
-    select: {
-      id: true,
-      visitCount: true,
-      websiteUrl: true,
     },
   });
 
-  return product;
+  const now = new Date();
+
+  if (!existingVisit) {
+    // First time this IP visits this product -> Record visit & increment count
+    await prisma.$transaction([
+      prisma.productVisit.create({
+        data: {
+          productId,
+          ipHash,
+          lastVisitedAt: now,
+        },
+      }),
+      prisma.product.update({
+        where: { id: productId },
+        data: {
+          visitCount: {
+            increment: 1,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      id: product.id,
+      visitCount: product.visitCount + 1,
+      websiteUrl: product.websiteUrl,
+    };
+  }
+
+  // If already visited, check if 7 days (or more) have passed since last visit
+  const timeSinceLastVisit = now.getTime() - new Date(existingVisit.lastVisitedAt).getTime();
+
+  if (timeSinceLastVisit >= SEVEN_DAYS_MS) {
+    // 7 days elapsed -> Refresh timestamp & increment count
+    await prisma.$transaction([
+      prisma.productVisit.update({
+        where: { id: existingVisit.id },
+        data: {
+          lastVisitedAt: now,
+        },
+      }),
+      prisma.product.update({
+        where: { id: productId },
+        data: {
+          visitCount: {
+            increment: 1,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      id: product.id,
+      visitCount: product.visitCount + 1,
+      websiteUrl: product.websiteUrl,
+    };
+  }
+
+  // Within 7 days cooldown -> Do not increment, return current state
+  return {
+    id: product.id,
+    visitCount: product.visitCount,
+    websiteUrl: product.websiteUrl,
+  };
 };
 
 const updateProductInDB = async (

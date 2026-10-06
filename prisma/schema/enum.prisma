@@ -20,3 +20,8 @@ enum PostStatus {
   REJECTED
 }
 
+enum NotificationType {
+  POST_LOVE
+  PRODUCT_UPVOTE
+}
+
