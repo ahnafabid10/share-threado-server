@@ -9,8 +9,8 @@ import { productRoutes } from "./modules/product/product.route";
 
 const app: Application = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "1.5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1.5mb" }));
 app.use(cookieParser());
 app.use(
   cors({
